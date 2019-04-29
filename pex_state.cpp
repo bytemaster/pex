@@ -196,7 +196,7 @@ namespace eosio {
 
       supply.amount -= exin.amount;
 
-      pegin.amount = -peg_to_cover;
+      pegin.amount = -peg_to_cover;  /// NOTE: this errors if pegin goes below 0
       pegin.symbol = pegged_balance.symbol;
 
       return extended_asset( col_from_maker+col_from_spare, collateral_balance.get_extended_symbol() );
