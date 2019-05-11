@@ -1,25 +1,27 @@
-#include "pex_state.hpp"
+#include <pex_state.hpp>
+#include <cmath>
 
 namespace eosio {
 
    void pex_state::init( name           mgr,
-                               double         ifee,
-                               extended_asset icollateral, 
-                               double         iprice, 
-                               double         trratio, 
-                               extended_symbol supply_sym, symbol_type peg_sym ) {
+                         double         ifee,
+                         extended_asset icollateral, 
+                         double         iprice, 
+                         double         trratio, 
+                         extended_symbol supply_sym, symbol peg_sym ) 
+   {
       manager                 = mgr;
       fee                     = ifee;
-      supply                  = extended_asset( icollateral.amount * 10000, supply_sym);
+      supply                  = extended_asset( icollateral.quantity.amount * 10000, supply_sym);
       target_reserve_ratio    = trratio;
       current_target_price    = iprice;
-      collateral_balance      = extended_asset( int64_t(icollateral.amount / trratio), icollateral.get_extended_symbol() );
-      spare_collateral        = extended_asset( icollateral.amount - collateral_balance.amount, icollateral.get_extended_symbol() );
-      pegged_balance.amount   = int64_t(collateral_balance.amount * iprice);
-      pegged_balance.symbol   = peg_sym;
-      pegged_balance.contract = supply.contract;
-      sold_peg                = pegged_balance;
-      sold_peg.amount         = 0;
+      collateral_balance      = extended_asset( int64_t(icollateral.quantity.amount / trratio), icollateral.get_extended_symbol() );
+      spare_collateral        = extended_asset( icollateral.quantity.amount - collateral_balance.quantity.amount, icollateral.get_extended_symbol() );
+      pegged_balance.quantity.amount = int64_t(collateral_balance.quantity.amount * iprice);
+      pegged_balance.quantity.symbol = peg_sym;
+      pegged_balance.contract        = supply.contract;
+      sold_peg.symbol                = pegged_balance.quantity.symbol;
+      sold_peg.amount                = 0;
    }
 
 
@@ -55,6 +57,7 @@ namespace eosio {
     */
    void pex_state::sync_toward_feed( block_timestamp_type now ) {
 
+#if 0
       double bancor_price = double(collateral_balance.amount) / pegged_balance.amount;
       double delta = std::fabs(bancor_price - current_target_price);
       double dpercent = delta / current_target_price;
@@ -120,86 +123,75 @@ namespace eosio {
          /// adjust spare collateral and maker collateral by delta
          spare_collateral.amount   -= delta_col;
          collateral_balance.amount += delta_col;
-
+#endif
    }
 
-   extended_asset pex_state::convert_to_exchange( extended_asset& connector_balance, extended_asset in ) {
-
-      real_type R(supply.amount);
-      real_type C(connector_balance.amount+in.amount);
-      real_type T(in.amount);
-      const real_type F(1/2.0);
-      const real_type ONE(1.0);
-
-      real_type E = -R * (ONE - std::pow( ONE + T / C, F) );
-      int64_t issued = int64_t(E);
-
-      supply.amount += issued;
-      connector_balance.amount += in.amount;
-
-      return extended_asset( issued, supply.get_extended_symbol() );
-   }
-
-   extended_asset pex_state::convert_from_exchange( extended_asset& connector_balance, extended_asset in ) {
-      check( in.contract == supply.contract, "unexpected asset contract input" );
-      check( in.symbol== supply.symbol, "unexpected asset symbol input" );
-
-      real_type R(supply.amount - in.amount);
-      real_type C(connector_balance.amount);
-      real_type E(in.amount);
-      const real_type F(2.0);
-      const real_type ONE(1.0);
-
-
-      real_type T = C * (std::pow( ONE + E/R, F) - ONE);
-      int64_t out = int64_t(T);
-
-      supply.amount -= in.amount;
-      connector_balance.amount -= out;
-
-      return extended_asset( out, connector_balance.get_extended_symbol() );
-   }
 
    extended_asset pex_state::buyex( const extended_asset& colin, asset& pegout ) {
-      auto collateral_supply = collateral_balance.amount + spare_collateral.amount;
-      double percent = double( colin.amount + collateral_supply ) / collateral_supply;
+      auto collateral_supply = collateral_balance.quantity.amount + spare_collateral.quantity.amount;
+      double percent = double( colin.quantity.amount + collateral_supply ) / collateral_supply;
 
-      int64_t peg_to_maker = int64_t(pegged_balance.amount * percent - pegged_balance.amount);
-      int64_t col_to_maker = int64_t(collateral_balance.amount * percent - collateral_balance.amount);
-      int64_t col_to_spare = int64_t(spare_collateral.amount * percent - spare_collateral.amount);
+      int64_t peg_to_maker = int64_t(pegged_balance.quantity.amount * percent - pegged_balance.quantity.amount);
+      int64_t col_to_maker = int64_t(collateral_balance.quantity.amount * percent - collateral_balance.quantity.amount);
+      int64_t col_to_spare = int64_t(spare_collateral.quantity.amount * percent - spare_collateral.quantity.amount);
       int64_t peg_to_sold  = int64_t(sold_peg.amount * percent - sold_peg.amount);
-      int64_t new_ex       = int64_t(supply.amount * percent - supply.amount);
+      int64_t new_ex       = int64_t(supply.quantity.amount * percent - supply.quantity.amount);
 
-      pegged_balance.amount     += peg_to_maker;
-      collateral_balance.amount += col_to_maker;
-      spare_collateral.amount   += col_to_spare;
-      supply.amount             += new_ex;
+      pegged_balance.quantity.amount     += peg_to_maker;
+      collateral_balance.quantity.amount += col_to_maker;
+      spare_collateral.quantity.amount   += col_to_spare;
+      supply.quantity.amount             += new_ex;
       sold_peg.amount           += peg_to_sold;
 
-      pegout.symbol = pegged_balance.symbol;
+      pegout.symbol = pegged_balance.quantity.symbol;
       pegout.amount = peg_to_sold;
 
       return extended_asset( new_ex, supply.get_extended_symbol());
    }
 
    extended_asset pex_state::sellex( const extended_asset& exin, asset& pegin ) {
-      double percent         = double(exin.amount) / supply.amount;
-      int64_t peg_from_maker = int64_t(pegged_balance.amount * percent);
+      double percent         = double(exin.quantity.amount) / supply.quantity.amount;
+      int64_t peg_from_maker = int64_t(pegged_balance.quantity.amount * percent);
       int64_t peg_to_cover   = int64_t(sold_peg.amount * percent);
-      int64_t col_from_maker = int64_t(collateral_balance.amount * percent);
-      int64_t col_from_spare = int64_t(spare_collateral.amount * percent);
+      int64_t col_from_maker = int64_t(collateral_balance.quantity.amount * percent);
+      int64_t col_from_spare = int64_t(spare_collateral.quantity.amount * percent);
 
       sold_peg.amount             -= peg_to_cover;
-      collateral_balance.amount   -= col_from_maker;
-      pegged_balance.amount       -= peg_from_maker;
-      spare_collateral.amount     -= col_from_spare;
+      collateral_balance.quantity.amount   -= col_from_maker;
+      pegged_balance.quantity.amount       -= peg_from_maker;
+      spare_collateral.quantity.amount     -= col_from_spare;
 
-      supply.amount -= exin.amount;
+      supply.quantity.amount -= exin.quantity.amount;
 
+      print( "peg to cover: ", peg_to_cover, "\n" );
       pegin.amount = -peg_to_cover;
-      pegin.symbol = pegged_balance.symbol;
+      print( "pegin: ", pegin, "\n" );
+      pegin.symbol = pegged_balance.quantity.symbol;
 
       return extended_asset( col_from_maker+col_from_spare, collateral_balance.get_extended_symbol() );
+   }
+
+   int64_t get_bancor_output( int64_t conin, int64_t conout, int64_t in ) {
+      const double F0 = double(conin);
+      const double T0 = double(conout);
+      const double I  = double(in);
+
+      auto out = int64_t( (I*T0) / (I+F0));
+      if( out < 0 ) out = 0;
+      return out;
+   }
+
+   int64_t bancor_convert( int64_t& conin, int64_t& conout, int64_t in ) {
+      const double F0 = double(conin);
+      const double T0 = double(conout);
+      const double I  = double(in);
+
+      auto out = int64_t( (I*T0) / (I+F0));
+      if( out < 0 ) out = 0;
+
+      conin  += in;
+      conout -= out;
+      return out;
    }
 
    extended_asset pex_state::convert( extended_asset from, extended_symbol to, asset& pegio ) {
@@ -207,7 +199,6 @@ namespace eosio {
       auto ex_symbol          = supply.get_extended_symbol();
       auto collateral_symbol  = collateral_balance.get_extended_symbol();
       auto peg_symbol         = pegged_balance.get_extended_symbol();
-
 
       if( to == ex_symbol ) {
          check( from.get_extended_symbol() == collateral_symbol, "can only buy ex with collateral token" );
@@ -218,15 +209,18 @@ namespace eosio {
       }
 
       if( sell_symbol == collateral_symbol ) {
-         auto tmp = convert_to_exchange( collateral_balance, from );
-         return convert_to_exchange( pegged_balance, tmp );
-      } else if ( sell_symbol == peg_symbol ) {
-         auto tmp = convert_to_exchange( pegged_balance, from );
-         return convert_to_exchange( collateral_balance, tmp );
+         check( to == peg_symbol, "invalid conversion" );
+         auto pegout = bancor_convert( collateral_balance.quantity.amount, pegged_balance.quantity.amount, from.quantity.amount );
+         sold_peg.amount += pegout;
+         return extended_asset( pegout, to );
+      } else {
+         check( sell_symbol == peg_symbol, "invalid conversion" ); 
+         check( to == collateral_symbol, "invalid conversion" );
+         auto colout = bancor_convert( pegged_balance.quantity.amount, collateral_balance.quantity.amount, from.quantity.amount );
+         sold_peg.amount -= from.quantity.amount;
+         check( sold_peg.amount > 0, "invalid state, implies peg supply compromised" );
+         return extended_asset( colout, to );
       }
-
-      check( false, "invalid conversion" );
-      eosio_exit(-1); /// signal no-return
    }
 
 

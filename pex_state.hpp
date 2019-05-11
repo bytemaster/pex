@@ -1,6 +1,7 @@
 #pragma once
 
-#include <eosiolib/asset.hpp>
+#include <eosio/eosio.hpp>
+#include <eosio/asset.hpp>
 
 namespace eosio {
 
@@ -11,7 +12,7 @@ namespace eosio {
     *  bancor exchange is entirely contained within this struct. There are no external
     *  side effects associated with using this API.
     */
-   struct pex_state {
+   struct [[eosio::table, eosio::contract("pex")]] pex_state {
       name              manager;
       extended_asset    supply; ///< exchange tokens supply
       asset             sold_peg; ///< peg tokens circulating 
@@ -26,7 +27,7 @@ namespace eosio {
       extended_asset collateral_balance;
       extended_asset pegged_balance;
 
-      uint64_t primary_key()const { return supply.symbol.name(); }
+      uint64_t primary_key()const { return supply.quantity.symbol.raw(); }
 
       /**
        *  @param pegio - when converting to or from exchange tokens some peg tokens may be required or
@@ -38,7 +39,7 @@ namespace eosio {
                            extended_asset initial_collateral, 
                            double         initial_price, 
                            double         target_reserve_ratio, 
-                           extended_symbol supply_symbol, symbol_type peg_symbol );
+                           extended_symbol supply_symbol, symbol peg_symbol );
 
       void           sync_toward_feed( block_timestamp_type now );
       void           sync_toward_target_reserve();
@@ -52,6 +53,6 @@ namespace eosio {
          extended_asset sellex( const extended_asset& colin, asset& pegin );
    };
 
-   typedef eosio::multi_index<N(dmarkets), pex_state> dmarkets;
+   typedef eosio::multi_index<"markets"_n, pex_state> market_table;
 
 } /// namespace eosio
