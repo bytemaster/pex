@@ -164,7 +164,7 @@ namespace eosio {
       supply.quantity.amount -= exin.quantity.amount;
 
       print( "peg to cover: ", peg_to_cover, "\n" );
-      pegin.amount = -peg_to_cover;
+      pegin.amount = -peg_to_cover; /// NOTE: this tells the caller how much peg token must come be provided by user
       print( "pegin: ", pegin, "\n" );
       pegin.symbol = pegged_balance.quantity.symbol;
 
