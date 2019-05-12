@@ -28,6 +28,7 @@ namespace eosio {
       extended_asset pegged_balance;
 
       uint64_t primary_key()const { return supply.quantity.symbol.raw(); }
+      uint64_t get_peg_symbol()const { return pegged_balance.quantity.symbol.raw(); } /// index on this to ensure unique
 
       /**
        *  @param pegio - when converting to or from exchange tokens some peg tokens may be required or
@@ -53,6 +54,12 @@ namespace eosio {
          extended_asset sellex( const extended_asset& colin, asset& pegin );
    };
 
-   typedef eosio::multi_index<"markets"_n, pex_state> market_table;
+   struct [[eosio::table, eosio::contract("pex")]] pegs {
+      symbol peg_symbol;
+      uint64_t primary_key(){ return peg_symbol.raw(); }
+   };
+
+   typedef eosio::multi_index<"markets"_n, pex_state > market_table;
+   typedef eosio::multi_index<"pegtokens"_n, pegs> pegs_table;
 
 } /// namespace eosio
